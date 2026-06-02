@@ -6,12 +6,20 @@ import {
   type RiskLevel,
 } from './emotion';
 import { createMockReply } from './mockAI';
+import { PrivacyProxy } from '../proxies/privacyProxy';
+import { EmotionContext } from '../strategies/emotionContext';
+import { ApiEmotionStrategy } from '../strategies/apiStrategy';
+import { LocalEmotionStrategy } from '../strategies/localStrategy';
+import { AnxietyTemplate } from '../templates/anxietyTemplate';
+import { DefaultTemplate } from '../templates/defaultTemplate';
+import { DepressionTemplate } from '../templates/depressionTemplate';
+import type { ResponseTemplate } from '../templates/responseTemplate';
 
 export const AI_API_KEY = import.meta.env.VITE_AI_API_KEY ?? '';
 export const AI_BASE_URL = import.meta.env.VITE_AI_BASE_URL ?? 'https://open.bigmodel.cn/api/paas/v4';
 export const AI_MODEL = import.meta.env.VITE_AI_MODEL ?? 'glm-4-flash';
 
-type ApiMessage = {
+export type ApiMessage = {
   role: 'system' | 'user' | 'assistant';
   content: string;
 };
@@ -43,6 +51,15 @@ function createFallbackAnalysis(text: string): EmotionAnalysisResult {
     analysisSource: 'local',
     analysisModel: 'local-keyword-fallback',
   };
+}
+
+export function createLocalReply(text: string, analysis: EmotionAnalysis): string {
+  const templates: Partial<Record<Emotion, ResponseTemplate>> = {
+    anxiety: new AnxietyTemplate(),
+    depression: new DepressionTemplate(),
+  };
+  const template = templates[analysis.emotion] ?? new DefaultTemplate();
+  return template.generate(text, analysis.emotion);
 }
 
 function normalizeEmotion(value: unknown): Emotion {
@@ -110,7 +127,7 @@ export async function createApiReply(
   history: ApiMessage[],
 ) {
   if (!hasApiConfig()) {
-    return createMockReply(text, analysis);
+    return createLocalReply(text, analysis);
   }
 
   const endpoint = getChatCompletionEndpoint();
@@ -141,19 +158,31 @@ export async function createApiReply(
 
     const data = (await response.json()) as ChatCompletionResponse;
     const content = data.choices?.[0]?.message?.content?.trim();
-    return content || createMockReply(text, analysis);
+    return content || createLocalReply(text, analysis);
   } catch (error) {
     console.warn('AI API failed, fallback to mock reply.', error);
-    return `${createMockReply(text, analysis)}\n\n（Demo 提示：真实 API 调用失败，已自动使用本地 mock 回复。请检查 API Key、Base URL、模型名或浏览器 CORS 设置。）`;
+    return `${createLocalReply(text, analysis)}\n\n（Demo 提示：真实 API 调用失败，已自动使用本地模板回复。请检查 API Key、Base URL、模型名或浏览器 CORS 设置。）`;
   }
 }
 
 export async function analyzeEmotionWithApi(text: string): Promise<EmotionAnalysisResult> {
+  return PrivacyProxy.analyze(text, async (sanitizedText) => {
+    const context = new EmotionContext(hasApiConfig() ? new ApiEmotionStrategy() : new LocalEmotionStrategy());
+    try {
+      return await context.analyze(sanitizedText);
+    } catch (error) {
+      console.warn('Emotion API failed, fallback to local strategy.', error);
+      context.setStrategy(new LocalEmotionStrategy());
+      return context.analyze(sanitizedText);
+    }
+  });
+}
+
+export async function analyzeEmotionWithRemoteApi(text: string): Promise<EmotionAnalysisResult> {
   if (!hasApiConfig()) {
-    return createFallbackAnalysis(text);
+    throw new Error('AI API config is missing.');
   }
 
-  try {
     const response = await fetch(getChatCompletionEndpoint(), {
       method: 'POST',
       headers: {
@@ -207,8 +236,4 @@ export async function analyzeEmotionWithApi(text: string): Promise<EmotionAnalys
       analysisSource: 'api',
       analysisModel: AI_MODEL,
     };
-  } catch (error) {
-    console.warn('Emotion API failed, fallback to local analysis.', error);
-    return createFallbackAnalysis(text);
-  }
 }

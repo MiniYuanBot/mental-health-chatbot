@@ -4,6 +4,7 @@ const AUTH_KEY = 'pku_mh_auth';
 const PROFILE_KEY = 'pku_mh_profile';
 const CHAT_KEY = 'pku_mh_chat_messages';
 const RECORD_KEY = 'pku_mh_emotion_records';
+const STORAGE_PREFIX = 'pku_mh_';
 
 export type AuthInfo = {
   userId: string;
@@ -46,6 +47,37 @@ function readJson<T>(key: string, fallback: T): T {
     return raw ? (JSON.parse(raw) as T) : fallback;
   } catch {
     return fallback;
+  }
+}
+
+// 单例模式：统一管理带应用前缀的 localStorage 访问
+export class StorageManager {
+  private static instance: StorageManager | null = null;
+  private readonly prefix = STORAGE_PREFIX;
+
+  private constructor() {}
+
+  static getInstance(): StorageManager {
+    if (!StorageManager.instance) {
+      StorageManager.instance = new StorageManager();
+    }
+    return StorageManager.instance;
+  }
+
+  set<T>(key: string, value: T): void {
+    writeJson(this.withPrefix(key), value);
+  }
+
+  get<T>(key: string, fallback: T): T {
+    return readJson<T>(this.withPrefix(key), fallback);
+  }
+
+  remove(key: string): void {
+    localStorage.removeItem(this.withPrefix(key));
+  }
+
+  private withPrefix(key: string): string {
+    return key.startsWith(this.prefix) ? key : `${this.prefix}${key}`;
   }
 }
 

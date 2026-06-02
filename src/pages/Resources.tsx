@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import EmotionBadge from '../components/EmotionBadge';
 import ResourceCard from '../components/ResourceCard';
 import RiskAlert from '../components/RiskAlert';
+import { ResourceAdapter } from '../adapters/resourceAdapter';
 import { getRecommendedResources, resources } from '../data/resources';
 import { fetchEmotionHistory } from '../utils/api';
 import { emotionLabels, type Emotion } from '../utils/emotion';
@@ -27,6 +28,7 @@ export default function Resources() {
   }, []);
 
   const recommended = getRecommendedResources(latest?.emotion, latest?.riskLevel, 5);
+  const historyResources = ResourceAdapter.toResourceList(records);
 
   return (
     <div className="content-stack">
@@ -59,6 +61,12 @@ export default function Resources() {
       <section className="panel secondary-panel">
         <h2>全部示例资源</h2>
         <div className="resource-list">
+          {historyResources.map((resource) => (
+            <div key={resource.title}>
+              <strong>{resource.title}</strong>
+              <p>{resource.desc}</p>
+            </div>
+          ))}
           {resources.map((resource) => (
             <div key={resource.title}>
               <strong>{resource.title}</strong>

@@ -5,6 +5,7 @@ import json
 import secrets
 import sqlite3
 import sys
+import threading
 import uuid
 from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -68,12 +69,31 @@ def hash_password(password: str, salt: str) -> str:
     return digest.hex()
 
 
+class DatabaseManager:
+    """单例模式：复用 SQLite 连接并通过锁保护写入。"""
+    _instance: "DatabaseManager | None" = None
+    _lock = threading.Lock()
+
+    def __new__(cls) -> "DatabaseManager":
+        if cls._instance is None:
+            with cls._lock:
+                if cls._instance is None:
+                    instance = super().__new__(cls)
+                    DATA_DIR.mkdir(parents=True, exist_ok=True)
+                    instance.conn = sqlite3.connect(DB_PATH, check_same_thread=False)
+                    instance.conn.row_factory = sqlite3.Row
+                    instance.conn.execute("PRAGMA foreign_keys = ON")
+                    instance.write_lock = threading.Lock()
+                    cls._instance = instance
+        return cls._instance
+
+
 def connect() -> sqlite3.Connection:
-    DATA_DIR.mkdir(parents=True, exist_ok=True)
-    conn = sqlite3.connect(DB_PATH)
-    conn.row_factory = sqlite3.Row
-    conn.execute("PRAGMA foreign_keys = ON")
-    return conn
+    return DatabaseManager().conn
+
+
+def commit_locked() -> threading.Lock:
+    return DatabaseManager().write_lock
 
 
 def init_db() -> None:
@@ -190,6 +210,20 @@ class ApiError(Exception):
         self.message = message
 
 
+class RequestAdapter:
+    """适配器模式：把 BaseHTTPRequestHandler 请求转换为统一字典。"""
+
+    @staticmethod
+    def adapt(handler: BaseHTTPRequestHandler) -> dict[str, Any]:
+        parsed = urlparse(handler.path)
+        return {
+            "method": handler.command,
+            "path": parsed.path,
+            "headers": dict(handler.headers),
+            "query": parsed.query,
+        }
+
+
 def protected(handler: Callable[["Handler", sqlite3.Row], None]) -> Callable[["Handler"], None]:
     def wrapper(self: "Handler") -> None:
         handler(self, self.require_user())
@@ -237,8 +271,8 @@ class Handler(BaseHTTPRequestHandler):
             ("GET", "/api/emotion-history"): protected(Handler.emotion_history).__get__(self, Handler),
         }
         try:
-            parsed = urlparse(self.path)
-            route = routes.get((self.command, parsed.path))
+            request = RequestAdapter.adapt(self)
+            route = routes.get((str(request["method"]), str(request["path"])))
             if route is None:
                 raise ApiError(404, "接口不存在。")
             route()
@@ -277,7 +311,8 @@ class Handler(BaseHTTPRequestHandler):
         token = auth_header.removeprefix("Bearer ").strip()
         if not token:
             raise ApiError(401, "缺少登录凭证。")
-        with connect() as conn:
+        with commit_locked():
+            conn = connect()
             row = conn.execute(
                 "SELECT * FROM users WHERE auth_token = ?", (token,)).fetchone()
         if row is None:
@@ -305,7 +340,8 @@ class Handler(BaseHTTPRequestHandler):
         salt = secrets.token_hex(16)
         timestamp = now_iso()
         try:
-            with connect() as conn:
+            with commit_locked():
+                conn = connect()
                 conn.execute(
                     """
                     INSERT INTO users (id, email, student_id, password_hash, password_salt, nickname, auth_token, created_at, updated_at)
@@ -316,6 +352,7 @@ class Handler(BaseHTTPRequestHandler):
                 )
                 row = conn.execute("SELECT * FROM users WHERE id = ?",
                                    (user_id,)).fetchone()
+                conn.commit()
         except sqlite3.IntegrityError:
             raise ApiError(409, "该邮箱已注册，请直接登录。")
         self.write_json({"token": token, "user": user_payload(row)}, 201)
@@ -326,7 +363,8 @@ class Handler(BaseHTTPRequestHandler):
         password = str(payload.get("password", ""))
         if not email or not password:
             raise ApiError(400, "邮箱和密码不能为空。")
-        with connect() as conn:
+        with commit_locked():
+            conn = connect()
             row = conn.execute("SELECT * FROM users WHERE email = ?",
                                (email,)).fetchone()
             if row is None or not secrets.compare_digest(hash_password(password, row["password_salt"]), row["password_hash"]):
@@ -336,6 +374,7 @@ class Handler(BaseHTTPRequestHandler):
                          (token, now_iso(), row["id"]))
             updated = conn.execute(
                 "SELECT * FROM users WHERE id = ?", (row["id"],)).fetchone()
+            conn.commit()
         self.write_json({"token": token, "user": user_payload(updated)})
 
     def get_profile(self, user: sqlite3.Row) -> None:
@@ -344,11 +383,13 @@ class Handler(BaseHTTPRequestHandler):
     def update_profile(self, user: sqlite3.Row) -> None:
         payload = self.read_json()
         nickname = clean_text(str(payload.get("nickname", "匿名同学")) or "匿名同学", 24)
-        with connect() as conn:
+        with commit_locked():
+            conn = connect()
             conn.execute("UPDATE users SET nickname = ?, updated_at = ? WHERE id = ?",
                          (nickname, now_iso(), user["id"]))
             updated = conn.execute(
                 "SELECT * FROM users WHERE id = ?", (user["id"],)).fetchone()
+            conn.commit()
         self.write_json({"user": user_payload(updated)})
 
     def chat(self, user: sqlite3.Row) -> None:
@@ -364,7 +405,8 @@ class Handler(BaseHTTPRequestHandler):
         user_message_id = uuid.uuid4().hex
         ai_message_id = uuid.uuid4().hex
         record_id = uuid.uuid4().hex
-        with connect() as conn:
+        with commit_locked():
+            conn = connect()
             conn.execute(
                 "INSERT INTO chat_messages (id, user_id, role, content, emotion, score, risk_level, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
                 (user_message_id, user["id"], "user", content, analysis["emotion"],
@@ -380,6 +422,7 @@ class Handler(BaseHTTPRequestHandler):
                 (record_id, user["id"], analysis["emotion"], analysis["score"],
                  analysis["risk_level"], content, timestamp),
             )
+            conn.commit()
         self.write_json(
             {
                 "reply": reply,
@@ -395,7 +438,8 @@ class Handler(BaseHTTPRequestHandler):
         )
 
     def emotion_history(self, user: sqlite3.Row) -> None:
-        with connect() as conn:
+        with commit_locked():
+            conn = connect()
             records = conn.execute(
                 "SELECT * FROM emotion_records WHERE user_id = ? ORDER BY created_at ASC LIMIT 200",
                 (user["id"],),

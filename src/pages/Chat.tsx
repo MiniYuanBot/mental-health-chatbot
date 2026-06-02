@@ -1,9 +1,17 @@
 import { FormEvent, KeyboardEvent, useEffect, useRef, useState } from 'react';
-import ChatBubble from '../components/ChatBubble';
 import CrisisAlert from '../components/CrisisAlert';
 import RiskAlert from '../components/RiskAlert';
-import { fetchEmotionHistory, sendChatMessage } from '../utils/api';
-import { AI_API_KEY, AI_BASE_URL, AI_MODEL, analyzeEmotionWithApi, createApiReply } from '../utils/aiApi';
+import { ChatCaretaker } from '../caretakers/chatCaretaker';
+import { SendMessageCommand } from '../commands/chatCommand';
+import { CommandInvoker } from '../commands/commandInvoker';
+import { MessageFactory } from '../factories/messageFactory';
+import { ChatMemento } from '../mementos/chatMemento';
+import { CrisisAlertObserver } from '../observers/crisisObserver';
+import { PersistObserver } from '../observers/persistObserver';
+import { EmotionServiceFacade } from '../services/emotionFacade';
+import { EmotionSubject } from '../subjects/emotionSubject';
+import { fetchEmotionHistory } from '../utils/api';
+import { AI_API_KEY, AI_BASE_URL, AI_MODEL } from '../utils/aiApi';
 import {
   clearChatMessages,
   getChatMessages,
@@ -13,6 +21,13 @@ import {
   type ChatMessage,
 } from '../utils/storage';
 import type { ApiChatMessage } from '../utils/api';
+
+const emotionSubject = new EmotionSubject();
+emotionSubject.attach(new CrisisAlertObserver());
+emotionSubject.attach(new PersistObserver());
+
+const chatCaretaker = new ChatCaretaker();
+const commandInvoker = new CommandInvoker();
 
 const welcomeMessage: ChatMessage = {
   id: 'welcome',
@@ -37,6 +52,7 @@ function normalizeChatMessages(apiMessages: ApiChatMessage[]): ChatMessage[] {
 
 export default function Chat() {
   const profile = getProfile();
+  const facade = EmotionServiceFacade.getInstance();
   const [messages, setMessages] = useState<ChatMessage[]>(() => {
     const stored = getChatMessages();
     return stored.length > 0 ? stored : [welcomeMessage];
@@ -54,6 +70,7 @@ export default function Chat() {
         const savedMessages = normalizeChatMessages(result.messages);
         const history = savedMessages.length > 0 ? [welcomeMessage, ...savedMessages] : [welcomeMessage];
         setMessages(history);
+        chatCaretaker.add(new ChatMemento(history));
         setChatMessages(history);
         setEmotionRecords(result.records);
       })
@@ -75,7 +92,7 @@ export default function Chat() {
     setInput('');
     setIsSending(true);
 
-    const analysis = await analyzeEmotionWithApi(content);
+    const analysis = await facade.analyze(content);
     const now = new Date().toISOString();
     const userMessage: ChatMessage = {
       id: createId(),
@@ -90,7 +107,9 @@ export default function Chat() {
     };
 
     const messagesBeforeSend = messages;
-    setMessages([...messagesBeforeSend, userMessage]);
+    const optimisticMessages = commandInvoker.invoke(new SendMessageCommand(userMessage, messagesBeforeSend));
+    setMessages(optimisticMessages);
+    chatCaretaker.add(new ChatMemento(optimisticMessages));
 
     const apiHistory = messagesBeforeSend
       .filter((message) => message.id !== 'welcome')
@@ -99,18 +118,18 @@ export default function Chat() {
         content: message.content,
       }));
     try {
-      const reply = await createApiReply(content, analysis, apiHistory);
-      const saved = await sendChatMessage({
-        message: content,
-        reply,
+      const reply = await facade.createReply(content, analysis, apiHistory);
+      emotionSubject.notify({
+        userText: content,
         emotion: analysis.emotion,
         score: analysis.score,
         riskLevel: analysis.riskLevel,
-        analysisSource: analysis.analysisSource,
-        analysisModel: analysis.analysisModel,
+        aiReply: reply,
       });
+      const saved = await facade.persistChat(content, reply, analysis);
       const nextMessages = [...messagesBeforeSend, ...normalizeChatMessages(saved.messages)];
       setMessages(nextMessages);
+      chatCaretaker.add(new ChatMemento(nextMessages));
       setChatMessages(nextMessages);
     } catch (error) {
       const aiMessage: ChatMessage = {
@@ -121,6 +140,7 @@ export default function Chat() {
       };
       const nextMessages = [...messagesBeforeSend, userMessage, aiMessage];
       setMessages(nextMessages);
+      chatCaretaker.add(new ChatMemento(nextMessages));
       setChatMessages(nextMessages);
     } finally {
       setIsSending(false);
@@ -133,6 +153,14 @@ export default function Chat() {
   }
 
   function handleKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
+    if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'z') {
+      event.preventDefault();
+      const previous = chatCaretaker.undo() ?? new ChatMemento(commandInvoker.undoLast() ?? messages);
+      setMessages(previous.messages);
+      setChatMessages(previous.messages);
+      return;
+    }
+
     if (event.key === 'Enter' && !event.shiftKey) {
       event.preventDefault();
       sendMessage();
@@ -142,6 +170,7 @@ export default function Chat() {
   function resetChat() {
     clearChatMessages();
     setMessages([welcomeMessage]);
+    chatCaretaker.add(new ChatMemento([welcomeMessage]));
     setChatMessages([welcomeMessage]);
   }
 
@@ -166,9 +195,7 @@ export default function Chat() {
       <CrisisAlert open={latestHighRisk} />
 
       <section className="chat-window" aria-label="聊天记录">
-        {messages.map((message) => (
-          <ChatBubble key={message.id} message={message} nickname={profile.nickname} />
-        ))}
+        {messages.map((message) => MessageFactory.create(message, profile))}
         {isSending && (
           <div className="typing-indicator" aria-live="polite">
             正在识别情绪并生成回复...

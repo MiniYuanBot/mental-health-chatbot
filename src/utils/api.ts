@@ -55,6 +55,11 @@ export type EmotionHistoryResponse = {
   messages: ApiChatMessage[];
 };
 
+export type ApiMessageHistoryItem = {
+  role: 'system' | 'user' | 'assistant';
+  content: string;
+};
+
 type ApiErrorBody = {
   error?: string;
   code?: number;

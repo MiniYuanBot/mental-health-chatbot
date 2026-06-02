@@ -1,7 +1,10 @@
+import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import EmotionBadge from '../components/EmotionBadge';
 import RiskAlert from '../components/RiskAlert';
+import { fetchEmotionHistory } from '../utils/api';
 import { getEmotionRecords, getProfile } from '../utils/storage';
+import type { EmotionRecord } from '../utils/storage';
 
 const quickLinks = [
   { to: '/chat', title: '开始聊天', desc: '记录此刻情绪，获得温和支持' },
@@ -12,8 +15,14 @@ const quickLinks = [
 
 export default function Dashboard() {
   const profile = getProfile();
-  const records = getEmotionRecords();
+  const [records, setRecords] = useState<EmotionRecord[]>(() => getEmotionRecords());
   const latest = records.at(-1);
+
+  useEffect(() => {
+    fetchEmotionHistory()
+      .then((result) => setRecords(result.records))
+      .catch(() => setRecords(getEmotionRecords()));
+  }, []);
 
   return (
     <div className="content-stack">
@@ -23,7 +32,7 @@ export default function Dashboard() {
           <h1>{profile.nickname}，今天想从哪里开始？</h1>
           <p>
             这是一个面向课程展示的 AI 心理健康陪伴与情绪支持系统，使用本地 mock
-            回复和浏览器 localStorage 展示完整功能流程。
+            回复、后端 SQLite 情绪记录和校园资源推荐展示完整功能流程。
           </p>
         </div>
         <div className="status-card">

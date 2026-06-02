@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react';
 import { clearAuth, getProfile } from '../utils/storage';
 
 const navItems = [
-  { path: '/', label: '首页' },
+  { path: '/home', label: '首页' },
   { path: '/chat', label: 'AI 陪伴' },
   { path: '/report', label: '趋势报告' },
   { path: '/resources', label: '资源推荐' },
@@ -30,7 +30,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   return (
     <div className="app-shell">
       <header className="topbar">
-        <div className="brand" onClick={() => navigate('/')} role="button" tabIndex={0}>
+        <div className="brand" onClick={() => navigate('/home')} role="button" tabIndex={0}>
           <span className="brand-mark">PKU</span>
           <span>
             <strong>心晴陪伴</strong>
@@ -39,7 +39,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         </div>
         <nav className="desktop-nav">
           {navItems.map((item) => (
-            <NavLink key={item.path} to={item.path} end={item.path === '/'}>
+            <NavLink key={item.path} to={item.path} end={item.path === '/home'}>
               {item.label}
             </NavLink>
           ))}
@@ -54,7 +54,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       <main className="page-wrap">{children}</main>
       <nav className="mobile-nav">
         {navItems.map((item) => (
-          <NavLink key={item.path} to={item.path} end={item.path === '/'}>
+          <NavLink key={item.path} to={item.path} end={item.path === '/home'}>
             {item.label}
           </NavLink>
         ))}

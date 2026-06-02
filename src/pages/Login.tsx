@@ -1,6 +1,6 @@
 import { FormEvent, useState } from 'react';
 import { Navigate, useNavigate } from 'react-router-dom';
-import { BACKEND_BASE_URL, login, signup } from '../utils/backendApi';
+import { BACKEND_BASE_URL, login, signup } from '../utils/api';
 import { getAuth, setAuth, setProfile } from '../utils/storage';
 
 function isPkuEmail(email: string) {
@@ -19,7 +19,7 @@ export default function Login() {
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   if (getAuth()) {
-    return <Navigate to="/" replace />;
+    return <Navigate to="/home" replace />;
   }
 
   async function handleSubmit(event: FormEvent) {
@@ -58,7 +58,7 @@ export default function Login() {
         loginTime: new Date().toISOString(),
       });
       setProfile({ nickname: result.user.nickname || '匿名同学' });
-      navigate('/', { replace: true });
+      navigate('/home', { replace: true });
     } catch (apiError) {
       setError(
         `${apiError instanceof Error ? apiError.message : '请求失败。'} 请确认后端已运行：npm run backend（${BACKEND_BASE_URL}）。`,

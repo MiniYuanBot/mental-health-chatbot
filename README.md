@@ -1,78 +1,88 @@
-# pku-mental-health-demo
+# AI 心理健康陪伴与情绪支持系统 Demo
 
-AI 心理健康陪伴与情绪支持系统课程作业 Demo。项目用于在浏览器中演示“学生身份模拟验证、匿名昵称、AI 情绪支持聊天、情绪趋势报告、校园资源推荐”等核心流程。
+这是一个用于课程作业展示的前后端分离 Demo，面向浏览器演示“学生身份模拟验证、匿名昵称、AI 情绪支持聊天、情绪趋势报告、校园资源推荐、危机提示”等完整流程。
+
+系统默认优先调用 OpenAI-compatible API 进行情绪识别和支持性回复生成；如果没有配置 API Key、接口失败或网络不可用，会自动降级到本地关键词规则和 mock 回复，保证课堂演示流程可以继续进行。
+
+## 功能概览
+
+- 学生身份模拟验证：仅允许 `@pku.edu.cn` 和 `@stu.pku.edu.cn` 邮箱注册。
+- 匿名昵称机制：登录档案保存真实邮箱和学号，聊天界面只展示虚拟昵称。
+- AI 情绪支持聊天：支持上下文回复、结构化情绪识别和本地降级逻辑。
+- 情绪数据持久化：聊天消息和情绪记录主存储在后端 SQLite，前端 localStorage 仅作为缓存。
+- 情绪趋势报告：展示最近 7 次情绪强度折线图、情绪分布、平均压力分和高风险次数。
+- 校园资源推荐：根据最近情绪类型和风险等级推荐校内咨询、自助练习、朋辈支持等资源。
+- 危机提示：识别到高风险关键词时弹出危机提示，并展示现实求助方式和免责声明。
+- 路由权限守卫：未登录访问 `/chat`、`/report`、`/profile`、`/resources` 会跳转登录页。
 
 ## 技术栈
 
-- React
-- Vite
-- TypeScript
-- React Router
-- Python 标准库 HTTP API
-- SQLite
-- LocalStorage
-- 普通 CSS 响应式布局
+- 前端：React、Vite、TypeScript、React Router、普通 CSS
+- 后端：Python 标准库 `http.server`、`sqlite3`、`hashlib.pbkdf2_hmac`、`uuid`
+- 数据：SQLite 主存储，localStorage 缓存前端状态
+- 依赖约束：前端不引入 UI/图表库，后端零第三方 Python 依赖
 
-## 如何运行
+## 项目结构
 
-请在 conda 环境 `mental_health` 中运行。项目现在是前后端分离结构，需要同时启动后端 API 和前端页面。
+```text
+backend/
+  server.py                      # Python HTTP API 入口
+  data/
+    init_db.py                   # SQLite schema 初始化脚本
+    mental_health_demo.sqlite3   # 首次运行后生成的数据库文件
+src/
+  App.tsx                        # 路由配置与权限守卫
+  main.tsx                       # 前端入口
+  components/
+    CrisisAlert.tsx              # 高风险危机弹窗
+    Layout.tsx                   # 应用导航与布局
+    ResourceCard.tsx             # 推荐资源卡片
+    RiskAlert.tsx                # 页面内风险提示
+  data/
+    resources.ts                 # 硬编码校园/自助资源数据
+  pages/
+    Chat.tsx                     # AI 陪伴聊天页
+    Dashboard.tsx                # 首页仪表盘
+    Login.tsx                    # 登录/注册页
+    Profile.tsx                  # 用户档案页
+    Report.tsx                   # 情绪趋势报告页
+    Resources.tsx                # 资源推荐页
+  styles/
+    global.css                   # 全局样式与响应式布局
+  utils/
+    api.ts                       # 后端 API 封装
+    aiApi.ts                     # LLM 调用、情绪识别与降级逻辑
+    backendApi.ts                # 兼容旧调用的 API re-export
+    storage.ts                   # localStorage 缓存与类型定义
+```
 
-首次运行先安装前端依赖：
+## 快速启动
+
+请在项目根目录运行。后端和前端需要分别启动。
+
+### 1. 安装前端依赖
 
 ```bash
-conda activate mental_health
-cd mental_health_agent
 npm install
 ```
 
-然后打开两个终端。
-
-### 终端 1：启动后端
-
-后端使用 Python 标准库 HTTP Server 和 SQLite，不需要额外安装 Python 包。
+### 2. 启动后端 API
 
 ```bash
-conda activate mental_health
-cd mental_health_agent
 npm run backend
 ```
 
-启动成功后会看到类似输出：
+后端默认监听：
 
 ```text
-Backend API running at http://127.0.0.1:8000
-SQLite database: .../mental_health_agent/backend/data/mental_health_demo.sqlite3
+http://127.0.0.1:8000
 ```
 
-后端接口地址：
-
-- 健康检查：`http://127.0.0.1:8000/api/health`
-- 注册：`POST http://127.0.0.1:8000/api/signup`
-- 登录：`POST http://127.0.0.1:8000/api/login`
-- 获取档案：`GET http://127.0.0.1:8000/api/profile`
-- 更新档案：`PUT http://127.0.0.1:8000/api/profile`
-
-### 终端 2：启动前端
+首次启动时会自动初始化数据库，也可以手动执行：
 
 ```bash
-conda activate mental_health
-cd mental_health_agent
-npm run dev
+python backend/data/init_db.py
 ```
-
-浏览器打开前端地址：
-
-```text
-http://localhost:5173
-```
-
-或：
-
-```text
-http://127.0.0.1:5173
-```
-
-前端会请求后端默认地址：`http://127.0.0.1:8000`。
 
 SQLite 数据库文件位置：
 
@@ -80,39 +90,178 @@ SQLite 数据库文件位置：
 backend/data/mental_health_demo.sqlite3
 ```
 
-如果登录或注册时报“后端请求失败”，通常是 `npm run backend` 没有启动，或后端端口 `8000` 被占用。
+### 3. 启动前端页面
 
-## Demo 登录方式
+```bash
+npm run dev
+```
 
-本 Demo 仅模拟北京大学学生身份验证，不会连接真实认证系统。首次使用需要注册账号，用户档案会保存到本地 SQLite 数据库。
+浏览器访问：
 
-- 邮箱：任意以 `@pku.edu.cn` 或 `@stu.pku.edu.cn` 结尾的邮箱
-- 学号：任意非空内容
+```text
+http://localhost:5173
+```
+
+如果注册、登录或聊天时报“服务维护中，请稍后重试”，请先确认 `npm run backend` 是否仍在运行，且端口 `8000` 没有被占用。
+
+## Demo 账号规则
+
+本项目只做学生身份模拟验证，不连接真实校园认证系统。
+
+- 邮箱：必须以 `@pku.edu.cn` 或 `@stu.pku.edu.cn` 结尾
+- 学号：1 到 32 位非空字符串
 - 密码：至少 6 位
-- 昵称：可选，默认“匿名同学”
+- 昵称：可选，默认生成匿名昵称
 
-示例：
+示例账号：
 
-- 邮箱：`demo@stu.pku.edu.cn`
-- 学号：`2200010000`
-- 密码：`123456`
+```text
+邮箱：demo@stu.pku.edu.cn
+学号：2200010000
+密码：123456
+昵称：匿名同学
+```
 
-## 功能说明
+## 环境变量
 
-- 注册/登录页：通过后端 API 模拟北大学生邮箱注册与登录。
-- 用户档案：邮箱、学号、虚拟昵称保存到 SQLite；聊天中只展示虚拟昵称。
-- 匿名设置：修改聊天中展示的虚拟昵称，并同步更新 SQLite。
-- AI 陪伴聊天：优先调用 OpenAI-compatible API 做情绪识别和回复生成；失败时回退到本地规则识别和 mock 回复。
-- 真实 API 配置：在 `src/utils/aiApi.ts` 中填写 `AI_API_KEY`、`AI_BASE_URL`、`AI_MODEL`。
-- 情绪记录：用户消息的内容、情绪、分数、风险等级、时间保存到 localStorage。
-- 危机提示：识别到高风险关键词时，展示醒目的现实求助提示。
-- 趋势报告：展示最近情绪、平均压力分、高风险次数、最近 7 次压力变化和情绪分布。
-- 资源推荐：根据最近情绪和风险等级推荐校园与自助支持资源。
+可以在项目根目录创建 `.env.local` 配置前端调用地址和 OpenAI-compatible API。变量会被 Vite 注入到浏览器端。
+
+```bash
+VITE_BACKEND_BASE_URL=http://127.0.0.1:8000
+VITE_AI_API_KEY=your_api_key_here
+VITE_AI_BASE_URL=https://open.bigmodel.cn/api/paas/v4
+VITE_AI_MODEL=glm-4-flash
+```
+
+说明：
+
+- 未配置 `VITE_AI_API_KEY` 时，系统会使用本地关键词识别和 mock 回复。
+- `VITE_AI_BASE_URL` 需要是 OpenAI-compatible 服务的根路径，前端会请求 `${VITE_AI_BASE_URL}/chat/completions`。
+- 由于 API Key 会进入浏览器打包产物，真实生产环境不应在前端直接暴露 Key；课程 Demo 本地演示可以这样配置。
+
+## 后端 API
+
+所有接口返回 JSON。错误格式统一为：
+
+```json
+{
+  "error": "错误说明",
+  "code": 400
+}
+```
+
+### 公开接口
+
+| 方法 | 路径 | 说明 |
+| --- | --- | --- |
+| `GET` | `/api/health` | 健康检查 |
+| `POST` | `/api/signup` | 注册，校验邮箱后缀并保存 PBKDF2 密码哈希 |
+| `POST` | `/api/login` | 登录，返回 session token 和用户档案 |
+
+### 需要登录的接口
+
+请求头需要携带：
+
+```text
+Authorization: Bearer <session_token>
+```
+
+| 方法 | 路径 | 说明 |
+| --- | --- | --- |
+| `GET` | `/api/profile` | 获取当前用户档案 |
+| `PUT` | `/api/profile` | 更新昵称 |
+| `POST` | `/api/chat` | 保存用户消息和 AI 回复，写入情绪记录 |
+| `GET` | `/api/emotion-history` | 获取当前用户的聊天消息和情绪记录 |
+
+## 数据库 Schema
+
+数据库由 `backend/data/init_db.py` 初始化，包含以下核心表：
+
+```text
+users(
+  id, email, student_id, password_hash, nickname, created_at
+)
+
+sessions(
+  token, user_id, created_at, expires_at
+)
+
+chat_messages(
+  id, user_id, role, content, emotion, score, risk_level, analysis_source,
+  analysis_model, created_at
+)
+
+emotion_records(
+  id, user_id, emotion_type, score, risk_level, note, analysis_source,
+  analysis_model, created_at
+)
+```
+
+实现要点：
+
+- 密码使用 `hashlib.pbkdf2_hmac` 加盐哈希，不保存明文密码。
+- SQL 操作使用参数化查询，避免字符串拼接。
+- 后端对邮箱、学号、密码、昵称和消息长度做基础校验。
+- 用户输入内容入库前会做 HTML 特殊字符转义。
+
+## 前端页面说明
+
+- `/login`：登录/注册。已登录用户访问会自动跳转 `/home`。
+- `/home`：仪表盘，展示最近情绪、记录数、高风险次数和入口卡片。
+- `/chat`：AI 陪伴聊天。输入框在移动端固定底部，消息列表可滚动。
+- `/report`：情绪趋势报告，优先从后端拉取情绪记录，失败时使用 localStorage 缓存。
+- `/resources`：根据最近情绪和风险等级推荐资源。
+- `/profile`：查看邮箱、学号、昵称并更新匿名昵称。
+
+## AI 调用与降级逻辑
+
+`src/utils/aiApi.ts` 包含两类调用：
+
+- `analyzeEmotionWithApi`：使用 JSON mode 要求模型返回结构化结果：
+
+```json
+{
+  "emotion": "depression",
+  "score": 7,
+  "risk_level": "medium"
+}
+```
+
+- `createApiReply`：基于情绪识别结果、最近聊天上下文和安全提示生成中文支持性回复。
+
+如果 API 未配置、请求失败、返回格式异常或 CORS 阻断，系统会自动使用本地规则：
+
+- 自伤、自杀、想死、不想活等关键词：`crisis` / `high` / `10`
+- 焦虑、压力、抑郁、愤怒、疲惫、孤独等关键词：映射到对应情绪和分数
+- 无明显关键词：`neutral` / `low`
+
+## 验证命令
+
+```bash
+npm run build
+python -m py_compile backend/server.py backend/data/init_db.py
+```
+
+当前实现已通过以上检查。
+
+## 演示检查清单
+
+1. 启动后端：`npm run backend`。
+2. 浏览器打开健康检查：`http://127.0.0.1:8000/api/health`，确认返回 JSON。
+3. 启动前端：`npm run dev`。
+4. 使用 `demo@stu.pku.edu.cn` 这类邮箱注册。
+5. 登录后进入聊天页，发送一条普通压力消息，确认有 AI 回复和情绪标签。
+6. 发送包含高风险关键词的消息，确认出现危机弹窗和页面风险提示。
+7. 打开报告页，确认折线图、情绪分布、平均压力分和高风险次数更新。
+8. 打开资源页，确认推荐资源随最近情绪变化。
+9. 打开档案页修改昵称，再回到聊天页确认昵称更新。
 
 ## 隐私与安全说明
 
-本项目后端仅用于课程 Demo，SQLite 数据库保存在本机项目目录下。默认不调用真实大模型 API；如果你在 `src/utils/aiApi.ts` 中直接填写 API Key，浏览器打包产物会暴露该 Key，仅适合课程 Demo 或本地演示。聊天记录和情绪记录仍保存在当前浏览器的 localStorage 中；用户档案保存在后端 SQLite 中。
+本系统仅用于课程 Demo。SQLite 数据库保存在本机项目目录下，session token 存在浏览器 localStorage 中。为了方便浏览器演示，真实 API Key 也通过前端环境变量注入，因此不适合直接部署到公网生产环境。
+
+聊天与情绪识别结果不构成医学诊断，系统回复只能作为情绪支持和资源导航，不能替代专业心理咨询、医疗帮助或紧急救援。
 
 ## 免责声明
 
-本系统仅用于课程作业展示，不能替代专业心理咨询、医疗帮助或医学诊断。若你正在经历强烈的自伤或自杀想法，请立即联系身边可信任的人、辅导员、学校心理咨询中心或当地紧急求助电话。
+本系统仅用于课程作业展示，不能替代专业心理咨询、医疗帮助或医学诊断。若你正在经历强烈的自伤或自杀想法，请立即联系身边可信任的人、辅导员、学校心理咨询中心或当地紧急求助电话，并尽量不要独处。

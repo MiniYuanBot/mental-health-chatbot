@@ -1,5 +1,5 @@
 import { FormEvent, useEffect, useState } from 'react';
-import { fetchProfile, updateProfile } from '../utils/backendApi';
+import { fetchProfile, updateProfile } from '../utils/api';
 import { getAuth, getProfile, setProfile } from '../utils/storage';
 
 export default function Profile() {
@@ -14,7 +14,7 @@ export default function Profile() {
     async function syncProfile() {
       if (!auth?.token) return;
       try {
-        const result = await fetchProfile(auth.token);
+        const result = await fetchProfile();
         setNickname(result.user.nickname || '匿名同学');
         setProfile({ nickname: result.user.nickname || '匿名同学' });
         window.dispatchEvent(new Event('profile-updated'));
@@ -34,7 +34,7 @@ export default function Profile() {
       if (!auth?.token) {
         throw new Error('缺少登录凭证，请重新登录。');
       }
-      const result = await updateProfile(auth.token, next);
+      const result = await updateProfile(next);
       setProfile({ nickname: result.user.nickname });
       setNickname(result.user.nickname);
       setSaved(true);

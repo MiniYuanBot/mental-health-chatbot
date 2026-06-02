@@ -230,6 +230,10 @@ button {
   gap: 16px;
 }
 
+.resource-grid.compact {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
 .feature-card {
   min-height: 140px;
   padding: 22px;
@@ -302,6 +306,58 @@ button {
 .warning-panel {
   border-color: rgba(255, 165, 0, 0.35);
   background: #fff8e8;
+}
+
+.crisis-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  background: rgba(20, 27, 44, 0.48);
+}
+
+.crisis-dialog {
+  width: min(560px, 100%);
+  max-height: calc(100vh - 40px);
+  overflow: auto;
+  border: 1px solid rgba(211, 82, 99, 0.24);
+  border-radius: 20px;
+  background: #ffffff;
+  box-shadow: 0 24px 80px rgba(20, 27, 44, 0.28);
+  padding: 24px;
+}
+
+.crisis-dialog h2 {
+  margin: 0 0 12px;
+  color: #9f2d3d;
+}
+
+.crisis-dialog p,
+.crisis-dialog dd {
+  color: #4d5570;
+  line-height: 1.7;
+}
+
+.crisis-list {
+  display: grid;
+  gap: 12px;
+  margin: 16px 0 20px;
+}
+
+.crisis-list div {
+  border-left: 3px solid #d35263;
+  padding-left: 12px;
+}
+
+.crisis-list dt {
+  color: #263458;
+  font-weight: 800;
+}
+
+.crisis-list dd {
+  margin: 4px 0 0;
 }
 
 .risk-alert {
@@ -958,6 +1014,10 @@ button {
   .grid-4,
   .metric-grid,
   .resource-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .resource-grid.compact {
     grid-template-columns: 1fr;
   }
 

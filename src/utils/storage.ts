@@ -25,7 +25,7 @@ export type ChatMessage = {
   emotion?: Emotion;
   score?: number;
   riskLevel?: RiskLevel;
-  analysisSource?: 'api' | 'local';
+  analysisSource?: 'api' | 'local' | 'server';
   analysisModel?: string;
 };
 
@@ -36,7 +36,7 @@ export type EmotionRecord = {
   score: number;
   riskLevel: RiskLevel;
   time: string;
-  analysisSource?: 'api' | 'local';
+  analysisSource?: 'api' | 'local' | 'server';
   analysisModel?: string;
 };
 

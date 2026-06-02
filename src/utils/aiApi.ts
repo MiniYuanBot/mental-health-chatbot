@@ -7,12 +7,9 @@ import {
 } from './emotion';
 import { createMockReply } from './mockAI';
 
-// Use environment variables for sensitive credentials.
-// In Vite, prefix with VITE_ to expose to the client-side code.
-// Never hardcode API keys in source code.
-export const AI_API_KEY = "2da976ca2e1947a090b3483629830005.tAW8XdkoYNNypc0E";
-export const AI_BASE_URL = 'https://open.bigmodel.cn/api/paas/v4';
-export const AI_MODEL = 'glm-4-flash';
+export const AI_API_KEY = import.meta.env.VITE_AI_API_KEY ?? '';
+export const AI_BASE_URL = import.meta.env.VITE_AI_BASE_URL ?? 'https://open.bigmodel.cn/api/paas/v4';
+export const AI_MODEL = import.meta.env.VITE_AI_MODEL ?? 'glm-4-flash';
 
 type ApiMessage = {
   role: 'system' | 'user' | 'assistant';
@@ -92,6 +89,7 @@ function parseJsonObject(content: string) {
     emotion?: unknown;
     score?: unknown;
     riskLevel?: unknown;
+    risk_level?: unknown;
   };
 }
 
@@ -166,18 +164,19 @@ export async function analyzeEmotionWithApi(text: string): Promise<EmotionAnalys
         model: AI_MODEL,
         temperature: 0,
         max_tokens: 160,
+        response_format: { type: 'json_object' },
         messages: [
           {
             role: 'system',
             content: [
               '你是情绪识别分类器，只输出严格 JSON，不要输出解释。',
-              '根据用户文本识别 emotion、score、riskLevel。',
+              '根据用户文本识别 emotion、score、risk_level。',
               'emotion 只能是 anxiety, stress, depression, anger, fatigue, loneliness, positive, neutral, crisis 之一。',
               'score 是 1 到 10 的整数，表示情绪强度或困扰强度。',
-              'riskLevel 只能是 low, medium, high。',
-              '如果文本表达自伤、自杀、想死、不想活、伤害自己等含义，emotion 必须为 crisis，riskLevel 必须为 high，score 必须为 10。',
+              'risk_level 只能是 low, medium, high。',
+              '如果文本表达自伤、自杀、想死、不想活、伤害自己等含义，emotion 必须为 crisis，risk_level 必须为 high，score 必须为 10。',
               '如果文本表达失恋、难受、伤心、崩溃、绝望、失眠、撑不住等，不能判为 neutral。',
-              '输出格式示例：{"emotion":"depression","score":7,"riskLevel":"medium"}',
+              '输出格式示例：{"emotion":"depression","score":7,"risk_level":"medium"}',
             ].join('\n'),
           },
           { role: 'user', content: text },
@@ -198,7 +197,8 @@ export async function analyzeEmotionWithApi(text: string): Promise<EmotionAnalys
     const parsed = parseJsonObject(content);
     const emotion = normalizeEmotion(parsed.emotion);
     const score = emotion === 'crisis' ? 10 : clampScore(parsed.score);
-    const riskLevel = emotion === 'crisis' ? 'high' : normalizeRiskLevel(parsed.riskLevel, emotion, score);
+    const riskLevel =
+      emotion === 'crisis' ? 'high' : normalizeRiskLevel(parsed.riskLevel ?? parsed.risk_level, emotion, score);
 
     return {
       emotion,

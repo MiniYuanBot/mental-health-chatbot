@@ -1,16 +1,18 @@
 import { FormEvent, KeyboardEvent, useEffect, useRef, useState } from 'react';
 import ChatBubble from '../components/ChatBubble';
+import CrisisAlert from '../components/CrisisAlert';
 import RiskAlert from '../components/RiskAlert';
+import { fetchEmotionHistory, sendChatMessage } from '../utils/api';
 import { AI_API_KEY, AI_BASE_URL, AI_MODEL, analyzeEmotionWithApi, createApiReply } from '../utils/aiApi';
 import {
-  addChatMessages,
-  addEmotionRecord,
   clearChatMessages,
   getChatMessages,
   getProfile,
   setChatMessages,
+  setEmotionRecords,
   type ChatMessage,
 } from '../utils/storage';
+import type { ApiChatMessage } from '../utils/api';
 
 const welcomeMessage: ChatMessage = {
   id: 'welcome',
@@ -22,6 +24,15 @@ const welcomeMessage: ChatMessage = {
 
 function createId() {
   return `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+}
+
+function normalizeChatMessages(apiMessages: ApiChatMessage[]): ChatMessage[] {
+  return apiMessages.map((message) => ({
+    ...message,
+    emotion: message.emotion ?? undefined,
+    score: message.score ?? undefined,
+    riskLevel: message.riskLevel ?? undefined,
+  }));
 }
 
 export default function Chat() {
@@ -38,9 +49,19 @@ export default function Chat() {
     .some((message) => message.riskLevel === 'high');
 
   useEffect(() => {
-    if (getChatMessages().length === 0) {
-      setChatMessages([welcomeMessage]);
-    }
+    fetchEmotionHistory()
+      .then((result) => {
+        const savedMessages = normalizeChatMessages(result.messages);
+        const history = savedMessages.length > 0 ? [welcomeMessage, ...savedMessages] : [welcomeMessage];
+        setMessages(history);
+        setChatMessages(history);
+        setEmotionRecords(result.records);
+      })
+      .catch(() => {
+        if (getChatMessages().length === 0) {
+          setChatMessages([welcomeMessage]);
+        }
+      });
   }, []);
 
   useEffect(() => {
@@ -70,17 +91,6 @@ export default function Chat() {
 
     const messagesBeforeSend = messages;
     setMessages([...messagesBeforeSend, userMessage]);
-    addChatMessages([userMessage]);
-    addEmotionRecord({
-      id: userMessage.id,
-      content,
-      emotion: analysis.emotion,
-      score: analysis.score,
-      riskLevel: analysis.riskLevel,
-      analysisSource: analysis.analysisSource,
-      analysisModel: analysis.analysisModel,
-      time: now,
-    });
 
     const apiHistory = messagesBeforeSend
       .filter((message) => message.id !== 'welcome')
@@ -88,16 +98,33 @@ export default function Chat() {
         role: message.role === 'user' ? ('user' as const) : ('assistant' as const),
         content: message.content,
       }));
-    const reply = await createApiReply(content, analysis, apiHistory);
-    const aiMessage: ChatMessage = {
-      id: createId(),
-      role: 'ai',
-      content: reply,
-      time: new Date().toISOString(),
-    };
-    setMessages((current) => [...current, aiMessage]);
-    addChatMessages([aiMessage]);
-    setIsSending(false);
+    try {
+      const reply = await createApiReply(content, analysis, apiHistory);
+      const saved = await sendChatMessage({
+        message: content,
+        reply,
+        emotion: analysis.emotion,
+        score: analysis.score,
+        riskLevel: analysis.riskLevel,
+        analysisSource: analysis.analysisSource,
+        analysisModel: analysis.analysisModel,
+      });
+      const nextMessages = [...messagesBeforeSend, ...normalizeChatMessages(saved.messages)];
+      setMessages(nextMessages);
+      setChatMessages(nextMessages);
+    } catch (error) {
+      const aiMessage: ChatMessage = {
+        id: createId(),
+        role: 'ai',
+        content: error instanceof Error ? error.message : '服务维护中，请稍后重试。',
+        time: new Date().toISOString(),
+      };
+      const nextMessages = [...messagesBeforeSend, userMessage, aiMessage];
+      setMessages(nextMessages);
+      setChatMessages(nextMessages);
+    } finally {
+      setIsSending(false);
+    }
   }
 
   function handleSubmit(event: FormEvent) {
@@ -136,6 +163,7 @@ export default function Chat() {
       </section>
 
       {latestHighRisk && <RiskAlert />}
+      <CrisisAlert open={latestHighRisk} />
 
       <section className="chat-window" aria-label="聊天记录">
         {messages.map((message) => (

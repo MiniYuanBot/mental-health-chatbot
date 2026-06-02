@@ -1,6 +1,9 @@
 import { useEffect, useState } from 'react';
 import EmotionBadge from '../components/EmotionBadge';
+import ResourceCard from '../components/ResourceCard';
 import RiskAlert from '../components/RiskAlert';
+import { getRecommendedResources } from '../data/resources';
+import { fetchEmotionHistory } from '../utils/api';
 import { AI_API_KEY, analyzeEmotionWithApi } from '../utils/aiApi';
 import { emotionLabels, riskLabels, type Emotion } from '../utils/emotion';
 import { getEmotionRecords, setEmotionRecords, type EmotionRecord } from '../utils/storage';
@@ -23,6 +26,13 @@ export default function Report() {
 
   useEffect(() => {
     async function reanalyzeHistoryWithApi() {
+      try {
+        const history = await fetchEmotionHistory();
+        setEmotionRecords(history.records);
+        setRecords(history.records);
+      } catch {
+        // Fall back to cached records when the backend is unavailable.
+      }
       if (!AI_API_KEY || records.length === 0) return;
 
       const shouldReanalyze = records.some((record) => record.analysisSource !== 'api');
@@ -49,7 +59,7 @@ export default function Report() {
     }
 
     reanalyzeHistoryWithApi();
-  }, []);
+  }, [records.length]);
 
   const latest = records.at(-1);
   const averageScore =
@@ -76,6 +86,7 @@ export default function Report() {
     }))
     .filter((item) => item.count > 0);
   const maxDistribution = Math.max(1, ...distribution.map((item) => item.count));
+  const recommended = getRecommendedResources(latest?.emotion, latest?.riskLevel, 3);
 
   return (
     <div className="content-stack">
@@ -84,7 +95,7 @@ export default function Report() {
           <p className="eyebrow">Report</p>
           <h1>情绪趋势报告</h1>
           <p>
-            报告数据来自当前浏览器 localStorage 中的历史聊天记录。
+            报告数据优先来自后端 SQLite 情绪记录，后端不可用时使用浏览器缓存。
             {isReanalyzing ? ' 正在调用 API 重新识别历史记录...' : ''}
           </p>
         </div>
@@ -168,7 +179,7 @@ export default function Report() {
           <section className="panel">
             <div className="section-title-line">
               <h2>最近对话情绪明细</h2>
-              <span>显示真实保存并写回 localStorage 的统计结果</span>
+              <span>显示后端同步并缓存到 localStorage 的统计结果</span>
             </div>
             <div className="record-table-wrap">
               <table className="record-table">
@@ -197,7 +208,7 @@ export default function Report() {
                         <td>{riskLabels[record.riskLevel]}</td>
                         <td>
                           <span className={`source-badge source-${record.analysisSource ?? 'local'}`}>
-                            {record.analysisSource === 'api' ? 'API' : '本地'}
+                            {record.analysisSource === 'api' ? 'API' : record.analysisSource === 'server' ? '后端' : '本地'}
                           </span>
                         </td>
                       </tr>
@@ -221,6 +232,15 @@ export default function Report() {
                   </div>
                   <strong>{item.count}</strong>
                 </div>
+              ))}
+            </div>
+          </section>
+
+          <section className="panel">
+            <h2>推荐支持资源</h2>
+            <div className="resource-grid compact">
+              {recommended.map((resource) => (
+                <ResourceCard key={resource.title} resource={resource} />
               ))}
             </div>
           </section>

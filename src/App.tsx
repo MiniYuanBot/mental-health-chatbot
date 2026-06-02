@@ -16,12 +16,23 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
   return <AppLayout>{children}</AppLayout>;
 }
 
+function PublicLoginRoute() {
+  if (getAuth()) {
+    return <Navigate to="/home" replace />;
+  }
+  return <Login />;
+}
+
 export default function App() {
   return (
     <Routes>
-      <Route path="/login" element={<Login />} />
+      <Route path="/login" element={<PublicLoginRoute />} />
       <Route
         path="/"
+        element={<Navigate to="/home" replace />}
+      />
+      <Route
+        path="/home"
         element={
           <ProtectedRoute>
             <Dashboard />

@@ -7,11 +7,12 @@ import {
 } from './emotion';
 import { createMockReply } from './mockAI';
 
-// Demo only: paste your key and OpenAI-compatible base URL here.
-// Warning: frontend code exposes these values to anyone who opens DevTools.
-export const AI_API_KEY = '';
-export const AI_BASE_URL = '';
-export const AI_MODEL = 'gpt-4o-mini';
+// Use environment variables for sensitive credentials.
+// In Vite, prefix with VITE_ to expose to the client-side code.
+// Never hardcode API keys in source code.
+export const AI_API_KEY = "2da976ca2e1947a090b3483629830005.tAW8XdkoYNNypc0E";
+export const AI_BASE_URL = 'https://open.bigmodel.cn/api/paas/v4';
+export const AI_MODEL = 'glm-4-flash';
 
 type ApiMessage = {
   role: 'system' | 'user' | 'assistant';
@@ -127,8 +128,6 @@ export async function createApiReply(
       headers: {
         Authorization: `Bearer ${AI_API_KEY}`,
         'Content-Type': 'application/json',
-        'HTTP-Referer': window.location.origin,
-        'X-Title': 'pku-mental-health-demo',
       },
       body: JSON.stringify({
         model: AI_MODEL,
@@ -162,8 +161,6 @@ export async function analyzeEmotionWithApi(text: string): Promise<EmotionAnalys
       headers: {
         Authorization: `Bearer ${AI_API_KEY}`,
         'Content-Type': 'application/json',
-        'HTTP-Referer': window.location.origin,
-        'X-Title': 'pku-mental-health-demo',
       },
       body: JSON.stringify({
         model: AI_MODEL,

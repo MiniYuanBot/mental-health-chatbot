@@ -4,4 +4,9 @@ node_modules/
 # build output
 dist/
 
+# SQLite databases
+*.sqlite3
+*.db
+*.sqlite
+
 .env.local
